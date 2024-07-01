@@ -287,7 +287,7 @@ class _MessageListState extends State<MessageList> with PerAccountStoreAwareStat
             onNotification: _handleScrollMetricsNotification,
             child: Stack(
               children: <Widget>[
-                _buildListView(context),
+                _buildListView(context, widget.narrow),
                 Positioned(
                   bottom: 0,
                   right: 0,
@@ -300,7 +300,7 @@ class _MessageListState extends State<MessageList> with PerAccountStoreAwareStat
               ])))));
   }
 
-  Widget _buildListView(BuildContext context) {
+  Widget _buildListView(BuildContext context, Narrow narrow) {
     final length = model!.items.length;
     const centerSliverKey = ValueKey('center sliver');
 
@@ -337,7 +337,7 @@ class _MessageListState extends State<MessageList> with PerAccountStoreAwareStat
           if (i == 1) return MarkAsReadWidget(narrow: widget.narrow);
 
           final data = model!.items[length - 1 - (i - 2)];
-          return _buildItem(data, i);
+          return _buildItem(data, i, widget.narrow);
         }));
 
     if (widget.narrow is CombinedFeedNarrow) {
@@ -373,7 +373,7 @@ class _MessageListState extends State<MessageList> with PerAccountStoreAwareStat
       ]);
   }
 
-  Widget _buildItem(MessageListItem data, int i) {
+  Widget _buildItem(MessageListItem data, int i, Narrow narrow) {
     switch (data) {
       case MessageListHistoryStartItem():
         return const Center(
@@ -393,13 +393,14 @@ class _MessageListState extends State<MessageList> with PerAccountStoreAwareStat
         final header = RecipientHeader(message: data.message, narrow: widget.narrow);
         return StickyHeaderItem(allowOverflow: true,
           header: header,
-          child: DateSeparator(message: data.message));
+          child: DateSeparator(message: data.message, narrow: widget.narrow,));
       case MessageListMessageItem():
         final header = RecipientHeader(message: data.message, narrow: widget.narrow);
         return MessageItem(
           key: ValueKey(data.message.id),
           header: header,
           trailingWhitespace: i == 1 ? 8 : 11,
+          narrow: widget.narrow,
           item: data);
     }
   }
@@ -528,9 +529,10 @@ class RecipientHeader extends StatelessWidget {
 }
 
 class DateSeparator extends StatelessWidget {
-  const DateSeparator({super.key, required this.message});
+  const DateSeparator({super.key, required this.message, required this.narrow});
 
   final Message message;
+  final Narrow narrow;
 
   // TODO(#95) in dark theme, use white, following web
   static const _line = BorderSide(width: 0, color: Colors.black);
@@ -541,7 +543,7 @@ class DateSeparator extends StatelessWidget {
     // to align with the vertically centered divider lines.
     const textBottomPadding = 2.0;
 
-    return ColoredBox(color: Colors.white,
+    return ColoredBox(color: specialBackgroundColorForDm(narrow),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
         child: Row(children: [
@@ -572,11 +574,13 @@ class MessageItem extends StatelessWidget {
     required this.item,
     required this.header,
     this.trailingWhitespace,
+    required this.narrow
   });
 
   final MessageListMessageItem item;
   final Widget header;
   final double? trailingWhitespace;
+  final Narrow narrow;
 
   @override
   Widget build(BuildContext context) {
@@ -587,7 +591,7 @@ class MessageItem extends StatelessWidget {
       child: _UnreadMarker(
         isRead: message.flags.contains(MessageFlag.read),
         child: ColoredBox(
-          color: Colors.white,
+          color: specialBackgroundColorForDm(narrow),
           child: Column(children: [
             MessageWithPossibleSender(item: item),
             if (trailingWhitespace != null && item.isLastInBlock) SizedBox(height: trailingWhitespace!),
@@ -992,6 +996,26 @@ final _kMessageTimestampFormat = DateFormat('h:mm aa', 'en_US');
 
 // TODO(#95) need dark-theme color (this one comes from the Figma)
 final _kMessageTimestampColor = const HSLColor.fromAHSL(1, 0, 0, 0.5).toColor();
+
+/// Responsible for changing the background color when the message page is
+/// a DM. Uses the color identified --color-background-private-message-content
+/// in the Zulip web app.
+
+const _specialBackgroundColorForDm = Color(0xFFF7F6F3);
+const _normalBackgroundColor = Color(0XFFFFFFFF);
+
+Color specialBackgroundColorForDm(Narrow narrow) {
+  switch(narrow) {
+    case DmNarrow():
+      return _specialBackgroundColorForDm;
+    case CombinedFeedNarrow():
+      return _normalBackgroundColor;
+    case StreamNarrow():
+      return _normalBackgroundColor;
+    case TopicNarrow():
+      return _normalBackgroundColor;
+  }
+}
 
 Future<void> markNarrowAsRead(
   BuildContext context,
